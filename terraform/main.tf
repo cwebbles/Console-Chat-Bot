@@ -25,8 +25,24 @@ resource "aws_lambda_function" "console_chat_bot_lambda" {
   runtime = "python3.9"
   role = aws_iam_role.lambda_exec.arn
   filename = var.lambda_zip_path
+  timeout = 10
+
+  environment {
+    variables = {
+      OPEN_AI_SECRET_NAME = "prod/open_ai"
+    }
+  }
+
+  layers = [aws_lambda_layer_version.lambda_layer.arn]
 
   source_code_hash = filebase64sha256(var.lambda_zip_path)
+}
+
+resource "aws_lambda_layer_version" "lambda_layer" {
+  filename = "../layer_content.zip"
+  layer_name = "openai-layer"
+  compatible_runtimes = ["python3.9"]
+  source_code_hash = filebase64sha256("../layer_content.zip")
 }
 
 # Define IAM Role for the Lambda function
@@ -44,6 +60,26 @@ resource "aws_iam_role" "lambda_exec" {
       }
     ]
   })
+}
+
+# Define IAM Policy for Lambda access to SSM
+resource "aws_iam_policy" "secrets_manager_access_policy" {
+  name   = "SecretsManagerAccessPolicy"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect   = "Allow",
+        Action   = "secretsmanager:GetSecretValue",
+        Resource = "*"
+      },
+    ],
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_secrets_manager_access_policy_attachment" {
+  policy_arn = aws_iam_policy.secrets_manager_access_policy.arn
+  role = aws_iam_role.lambda_exec.name
 }
 
 # Define IAM Policy Attachment for Lambda access to CloudWatch Logs
